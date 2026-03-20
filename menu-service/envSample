@@ -1,0 +1,10 @@
+# Menu Service Environment Variables
+
+# Upstream product API (can be changed in Kubernetes)
+BASE_URL=https://orderfoodonline.deno.dev/api
+
+# Allowed frontend origin (update in prod)
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Server port
+PORT=8080

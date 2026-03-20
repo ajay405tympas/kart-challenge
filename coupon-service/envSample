@@ -1,0 +1,7 @@
+# Coupon Service Environment Variables
+
+# Allowed frontend origin
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Server port
+PORT=8085

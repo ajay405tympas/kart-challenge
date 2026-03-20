@@ -1,0 +1,10 @@
+# Payment Service Environment Variables
+
+# Coupon service URL (Kubernetes service name)
+COUPON_SERVICE_URL=http://coupon-service:8085
+
+# Allowed frontend origin
+ALLOWED_ORIGIN=http://localhost:3000
+
+# Server port
+PORT=8084
