@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
+	"os"
 )
 
 type Req struct {
@@ -19,11 +21,22 @@ type Resp struct {
 	Message          string  `json:"message"`
 }
 
-// ✅ CORS middleware
+// ✅ Get env with fallback
+func getEnv(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
+// ✅ CORS middleware (env-driven)
 func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		w.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := getEnv("ALLOWED_ORIGIN", "http://localhost:3000")
+
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
@@ -38,49 +51,64 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 func main() {
 
+	port := getEnv("PORT", "8084")
+	couponServiceURL := getEnv("COUPON_SERVICE_URL", "http://localhost:8085")
+
+	log.Println("💳 Payment service starting on port:", port)
+
 	http.HandleFunc("/pay", corsMiddleware(func(w http.ResponseWriter, r *http.Request) {
+
+		log.Println("➡️ Incoming /pay request")
 
 		// ✅ Decode request
 		var req Req
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Println("❌ Decode error:", err)
 			http.Error(w, "Invalid request body", http.StatusBadRequest)
 			return
 		}
 
+		log.Printf("📥 Request: Amount=%.2f, Coupon=%s\n", req.Amount, req.Coupon)
+
 		// ✅ Default discounted amount
 		discountedAmount := req.Amount
 
-		// ✅ Call coupon service (if coupon exists)
+		// ✅ Call coupon service
 		if req.Coupon != "" {
 			body, _ := json.Marshal(map[string]interface{}{
-				"code":   req.Coupon,
+				"coupon": req.Coupon,
 				"amount": req.Amount,
 			})
 
-			resp, err := http.Post("http://localhost:8085/paywithcoupon", "application/json", bytes.NewBuffer(body))
-			if err == nil && resp != nil {
+			url := couponServiceURL + "/paywithcoupon"
+			log.Println("🔄 Calling Coupon Service:", url)
+
+			resp, err := http.Post(url, "application/json", bytes.NewBuffer(body))
+			if err != nil {
+				log.Println("⚠️ Coupon service not reachable:", err)
+			} else {
 				defer resp.Body.Close()
 
 				var data map[string]float64
-				if json.NewDecoder(resp.Body).Decode(&data) == nil {
+				if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+					log.Println("⚠️ Decode coupon response error:", err)
+				} else {
 					if val, ok := data["finalAmount"]; ok {
 						discountedAmount = val
+						log.Printf("💸 Discounted amount: %.2f\n", discountedAmount)
 					}
 				}
 			}
-			// graceful fallback if coupon fails
 		}
 
-		// ✅ Simulate payment processing using discounted amount
-		processedAmount := discountedAmount
+		// ✅ Simulate payment
+		log.Printf("💳 Processing payment for: %.2f\n", discountedAmount)
 
-		// (used to avoid unused variable + realistic flow)
-		_ = processedAmount
-
-		// ✅ Payment success → balance cleared
 		finalAmount := 0.0
 
-		// ✅ Response to client
+		log.Println("✅ Payment successful")
+
+		// ✅ Response
 		response := Resp{
 			Status:           "SUCCESS",
 			OriginalAmount:   req.Amount,
@@ -93,5 +121,5 @@ func main() {
 		json.NewEncoder(w).Encode(response)
 	}))
 
-	http.ListenAndServe(":8084", nil)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

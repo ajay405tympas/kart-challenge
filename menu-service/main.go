@@ -4,19 +4,29 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
-
-const baseURL = "https://orderfoodonline.deno.dev/api"
 
 var client = &http.Client{
 	Timeout: 5 * time.Second,
 }
 
+// ✅ Load env variables with fallback
+func getEnv(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
+}
+
 // CORS middleware
 func enableCORS(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+	origin := getEnv("ALLOWED_ORIGIN", "http://localhost:3000")
+
+	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, api_key")
 }
@@ -25,7 +35,6 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 func listProducts(w http.ResponseWriter, r *http.Request) {
 	enableCORS(w, r)
 
-	// Handle preflight request
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
 		return
@@ -36,11 +45,13 @@ func listProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Request received: /product")
+	baseURL := getEnv("BASE_URL", "https://orderfoodonline.deno.dev/api")
+
+	log.Println("📥 Request: /product")
 
 	resp, err := client.Get(baseURL + "/product")
 	if err != nil {
-		log.Println("Error calling upstream:", err)
+		log.Println("❌ Upstream error:", err)
 		http.Error(w, "Upstream service unavailable", http.StatusBadGateway)
 		return
 	}
@@ -49,9 +60,8 @@ func listProducts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Println("Error writing response:", err)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Println("❌ Response write error:", err)
 	}
 }
 
@@ -65,17 +75,18 @@ func getProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := strings.TrimPrefix(r.URL.Path, "/product/")
-
 	if id == "" {
 		http.Error(w, "Missing productId", http.StatusBadRequest)
 		return
 	}
 
-	log.Println("Request received: /product/", id)
+	baseURL := getEnv("BASE_URL", "https://orderfoodonline.deno.dev/api")
+
+	log.Println("📥 Request: /product/", id)
 
 	resp, err := client.Get(baseURL + "/product/" + id)
 	if err != nil {
-		log.Println("Error calling upstream:", err)
+		log.Println("❌ Upstream error:", err)
 		http.Error(w, "Upstream service unavailable", http.StatusBadGateway)
 		return
 	}
@@ -89,16 +100,17 @@ func getProduct(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(resp.StatusCode)
 
-	_, err = io.Copy(w, resp.Body)
-	if err != nil {
-		log.Println("Error writing response:", err)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		log.Println("❌ Response write error:", err)
 	}
 }
 
 func main() {
+	port := getEnv("PORT", "8080")
+
 	http.HandleFunc("/product", listProducts)
 	http.HandleFunc("/product/", getProduct)
 
-	log.Println("Menu service running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Println("🚀 Menu service running on port:", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
