@@ -17,6 +17,7 @@ Place your coupon files:
 - couponbase2.txt
 - couponbase3.txt
 - Please unzip  the file and copy the file into dBService folder
+- Please note you need to have postgresSQL running in the machine and you need to create a database table 'coupons' and by executing the command run
 
 ## Output
 Data will be loaded into PostgreSQL table:
